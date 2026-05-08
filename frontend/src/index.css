@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-bg text-secondary font-sans antialiased;
+  }
+}
+
+@layer utilities {
+  .touch-min {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
