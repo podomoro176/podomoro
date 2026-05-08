@@ -7,3 +7,5 @@ build/
 uploads/
 prisma/migrations/*.sql.bak
 coverage/
+.claude/
+*.env.txt

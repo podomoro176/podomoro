@@ -1,0 +1,679 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  owner
+  partner
+  boekhouder
+  manager
+  cashier
+  staff
+  customer
+}
+
+enum AuditEventType {
+  login
+  logout
+  failed_attempt
+  token_refresh
+}
+
+enum OrderSource {
+  pos
+  online
+}
+
+enum OrderStatus {
+  pending
+  accepted
+  preparing
+  ready
+  completed
+  cancelled
+}
+
+enum PaymentMethod {
+  cash
+  pin
+  credit_card
+  online
+}
+
+enum PaymentStatus {
+  unpaid
+  paid
+}
+
+enum DiscountType {
+  percentage
+  fixed
+}
+
+enum TableStatus {
+  free
+  occupied
+  reserved
+}
+
+enum ContractType {
+  fulltime
+  parttime
+  oproep
+}
+
+enum LeaveType {
+  vakantie
+  ziek
+  bijzonder_verlof
+}
+
+enum ApprovalStatus {
+  pending
+  approved
+  rejected
+}
+
+enum SopCategory {
+  food_safety
+  hygiene
+  opening_procedure
+  closing_procedure
+  customer_service
+  emergency
+}
+
+enum StockUnit {
+  kg
+  liter
+  stuk
+}
+
+enum DistributorOrderStatus {
+  draft
+  submitted
+  received
+}
+
+enum WasteReason {
+  expired
+  dropped
+  overproduced
+  quality_fail
+  other
+}
+
+enum ReviewSource {
+  manual
+  google_api
+}
+
+// ─── Core ─────────────────────────────────────────────────────────────────────
+
+model Branch {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String
+  address   String
+  city      String
+  phone     String
+  email     String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users              User[]
+  menuItems          MenuItem[]
+  tables             RestaurantTable[]
+  orders             Order[]
+  employees          Employee[]
+  sopDocuments       SopDocument[]
+  sopVideos          SopVideo[]
+  recipes            Recipe[]
+  suppliers          Supplier[]
+  distributorOrders  DistributorOrder[]
+  stockLevels        StockLevel[]
+  wasteLogs          WasteLog[]
+  financePeriods     FinancePeriod[]
+  reviewScores       ReviewScore[]
+  shifts             Shift[]
+  attendance         Attendance[]
+  leaveRequests      LeaveRequest[]
+
+  @@map("branches")
+}
+
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+
+model User {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email          String    @unique
+  passwordHash   String
+  role           Role
+  branchId       String?   @db.Uuid
+  isActive       Boolean   @default(true)
+  failedAttempts Int       @default(0)
+  lockedUntil    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  branch             Branch?          @relation(fields: [branchId], references: [id])
+  sessions           Session[]
+  auditLogs          AuditLog[]
+  confirmedAllergens AllergenLog[]
+  discountOrders     Order[]          @relation("DiscountApplier")
+  cashierOrders      Order[]          @relation("Cashier")
+  transactions       Transaction[]
+  employee           Employee?
+  sopDocumentsUploaded SopDocument[]
+  sopVideosUploaded    SopVideo[]
+  wasteLogs          WasteLog[]
+  reviewedLeave      LeaveRequest[]   @relation("LeaveReviewer")
+  closedPeriods      FinancePeriod[]
+  createdRecipes     Recipe[]
+
+  @@map("users")
+}
+
+model Session {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String   @db.Uuid
+  refreshToken String   @unique
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("sessions")
+}
+
+model AuditLog {
+  id         String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String?        @db.Uuid
+  eventType  AuditEventType
+  ipAddress  String
+  userAgent  String
+  createdAt  DateTime       @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@map("audit_log")
+}
+
+// ─── Menu ─────────────────────────────────────────────────────────────────────
+
+model MenuItem {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  branchId    String   @db.Uuid
+  name        String
+  description String?
+  price       Int
+  category    String
+  imageUrl    String?
+  allergens   String[]
+  isAvailable Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  branch       Branch        @relation(fields: [branchId], references: [id])
+  orderItems   OrderItem[]
+  allergenLogs AllergenLog[]
+
+  @@map("menu_items")
+}
+
+// ─── POS / Orders ─────────────────────────────────────────────────────────────
+
+model RestaurantTable {
+  id             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  branchId       String      @db.Uuid
+  tableNumber    Int
+  capacity       Int
+  status         TableStatus @default(free)
+  currentOrderId String?     @db.Uuid
+
+  branch Branch @relation(fields: [branchId], references: [id])
+  order  Order? @relation(fields: [currentOrderId], references: [id])
+
+  @@unique([branchId, tableNumber])
+  @@map("tables")
+}
+
+model Order {
+  id                String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  branchId          String        @db.Uuid
+  orderNumber       Int
+  source            OrderSource
+  tableNumber       Int?
+  isTakeaway        Boolean       @default(false)
+  status            OrderStatus   @default(pending)
+  paymentMethod     PaymentMethod?
+  paymentStatus     PaymentStatus @default(unpaid)
+  totalAmount       Int           @default(0)
+  discountAmount    Int           @default(0)
+  discountType      DiscountType?
+  discountAppliedBy String?       @db.Uuid
+  notes             String?
+  cashierId         String?       @db.Uuid
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  branch          Branch            @relation(fields: [branchId], references: [id])
+  discountApplier User?             @relation("DiscountApplier", fields: [discountAppliedBy], references: [id])
+  cashier         User?             @relation("Cashier", fields: [cashierId], references: [id])
+  items           OrderItem[]
+  transactions    Transaction[]
+  allergenLogs    AllergenLog[]
+  tables          RestaurantTable[]
+
+  @@unique([branchId, orderNumber])
+  @@map("orders")
+}
+
+model OrderItem {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId    String   @db.Uuid
+  menuItemId String   @db.Uuid
+  quantity   Int
+  unitPrice  Int
+  notes      String?
+  createdAt  DateTime @default(now())
+
+  order    Order    @relation(fields: [orderId], references: [id])
+  menuItem MenuItem @relation(fields: [menuItemId], references: [id])
+
+  @@map("order_items")
+}
+
+model Transaction {
+  id                    String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId               String        @db.Uuid
+  branchId              String        @db.Uuid
+  amount                Int
+  paymentMethod         PaymentMethod
+  cashierId             String?       @db.Uuid
+  stripePaymentIntentId String?
+  createdAt             DateTime      @default(now())
+
+  order   Order  @relation(fields: [orderId], references: [id])
+  cashier User?  @relation(fields: [cashierId], references: [id])
+
+  @@map("transactions")
+}
+
+model AllergenLog {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId        String   @db.Uuid
+  itemId         String   @db.Uuid
+  allergensShown String[]
+  confirmedBy    String   @db.Uuid
+  confirmedAt    DateTime @default(now())
+
+  order    Order    @relation(fields: [orderId], references: [id])
+  menuItem MenuItem @relation(fields: [itemId], references: [id])
+  confirmer User    @relation(fields: [confirmedBy], references: [id])
+
+  @@map("allergen_log")
+}
+
+// ─── Customers (Online Orders) ────────────────────────────────────────────────
+
+model Customer {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email       String    @unique
+  name        String
+  phone       String?
+  birthday    DateTime?
+  visitCount  Int       @default(0)
+  lastVisit   DateTime?
+  totalSpent  Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("customers")
+}
+
+// ─── HR ───────────────────────────────────────────────────────────────────────
+
+model Employee {
+  id                    String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  branchId              String       @db.Uuid
+  userId                String       @unique @db.Uuid
+  name                  String
+  role                  String
+  contractType          ContractType
+  hourlyRate            Int
+  startDate             DateTime     @db.Date
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+
+  branch       Branch         @relation(fields: [branchId], references: [id])
+  user         User           @relation(fields: [userId], references: [id])
+  shifts       Shift[]
+  attendance   Attendance[]
+  leaveRequests LeaveRequest[]
+  availability Availability[]
+
+  @@map("employees")
+}
+
+model Shift {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  branchId    String   @db.Uuid
+  employeeId  String   @db.Uuid
+  date        DateTime @db.Date
+  startTime   DateTime @db.Time()
+  endTime     DateTime @db.Time()
+  roleOnShift String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  branch     Branch     @relation(fields: [branchId], references: [id])
+  employee   Employee   @relation(fields: [employeeId], references: [id])
+  attendance Attendance[]
+
+  @@map("shifts")
+}
+
+model Attendance {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  branchId       String   @db.Uuid
+  employeeId     String   @db.Uuid
+  shiftId        String?  @db.Uuid
+  clockIn        DateTime
+  clockOut       DateTime?
+  scheduledHours Decimal  @db.Decimal(5, 2)
+  actualHours    Decimal  @db.Decimal(5, 2)
+  createdAt      DateTime @default(now())
+
+  branch   Branch   @relation(fields: [branchId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id])
+  shift    Shift?   @relation(fields: [shiftId], references: [id])
+
+  @@map("attendance")
+}
+
+model LeaveRequest {
+  id         String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeId String         @db.Uuid
+  branchId   String         @db.Uuid
+  type       LeaveType
+  startDate  DateTime       @db.Date
+  endDate    DateTime       @db.Date
+  reason     String?
+  status     ApprovalStatus @default(pending)
+  reviewedBy String?        @db.Uuid
+  reviewedAt DateTime?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+  branch   Branch   @relation(fields: [branchId], references: [id])
+  reviewer User?    @relation("LeaveReviewer", fields: [reviewedBy], references: [id])
+
+  @@map("leave_requests")
+}
+
+model Availability {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeId    String   @db.Uuid
+  date          DateTime @db.Date
+  isUnavailable Boolean  @default(true)
+  reason        String?
+  createdAt     DateTime @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@map("availability")
+}
+
+// ─── SOP ──────────────────────────────────────────────────────────────────────
+
+model SopDocument {
+  id         String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  branchId   String      @db.Uuid
+  title      String
+  category   SopCategory
+  filePath   String
+  fileType   String
+  uploadedBy String      @db.Uuid
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  branch      Branch               @relation(fields: [branchId], references: [id])
+  uploader    User                 @relation(fields: [uploadedBy], references: [id])
+  completions DocumentCompletion[]
+
+  @@map("sop_documents")
+}
+
+model DocumentCompletion {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  documentId  String   @db.Uuid
+  employeeId  String   @db.Uuid
+  completedAt DateTime @default(now())
+
+  document SopDocument @relation(fields: [documentId], references: [id])
+
+  @@map("document_completions")
+}
+
+model SopVideo {
+  id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  branchId        String      @db.Uuid
+  title           String
+  category        SopCategory
+  videoUrl        String
+  isYoutubeEmbed  Boolean     @default(false)
+  uploadedBy      String      @db.Uuid
+  createdAt       DateTime    @default(now())
+
+  branch      Branch            @relation(fields: [branchId], references: [id])
+  uploader    User              @relation(fields: [uploadedBy], references: [id])
+  completions VideoCompletion[]
+
+  @@map("sop_videos")
+}
+
+model VideoCompletion {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  videoId     String   @db.Uuid
+  employeeId  String   @db.Uuid
+  completedAt DateTime @default(now())
+
+  video SopVideo @relation(fields: [videoId], references: [id])
+
+  @@map("video_completions")
+}
+
+model Recipe {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  branchId     String   @db.Uuid
+  name         String
+  basePortions Int
+  createdBy    String   @db.Uuid
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  branch      Branch             @relation(fields: [branchId], references: [id])
+  creator     User               @relation(fields: [createdBy], references: [id])
+  ingredients RecipeIngredient[]
+
+  @@map("recipes")
+}
+
+model RecipeIngredient {
+  id             String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  recipeId       String  @db.Uuid
+  ingredientName String
+  amount         Decimal @db.Decimal(10, 3)
+  unit           String
+  createdAt      DateTime @default(now())
+
+  recipe Recipe @relation(fields: [recipeId], references: [id])
+
+  @@map("recipe_ingredients")
+}
+
+// ─── Distributor Orders ───────────────────────────────────────────────────────
+
+model Supplier {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  branchId      String   @db.Uuid
+  name          String
+  contactPerson String?
+  email         String
+  phone         String?
+  orderDays     String[]
+  leadTimeDays  Int      @default(1)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  branch           Branch             @relation(fields: [branchId], references: [id])
+  products         SupplierProduct[]
+  distributorOrders DistributorOrder[]
+
+  @@map("suppliers")
+}
+
+model SupplierProduct {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  supplierId       String    @db.Uuid
+  name             String
+  unit             StockUnit
+  pricePerUnit     Int
+  minOrderQuantity Decimal   @db.Decimal(10, 3)
+  createdAt        DateTime  @default(now())
+
+  supplier           Supplier              @relation(fields: [supplierId], references: [id])
+  orderItems         DistributorOrderItem[]
+  stockLevels        StockLevel[]
+
+  @@map("supplier_products")
+}
+
+model StockLevel {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  branchId          String   @db.Uuid
+  supplierProductId String   @db.Uuid
+  currentStock      Decimal  @db.Decimal(10, 3)
+  parLevel          Decimal  @db.Decimal(10, 3)
+  updatedAt         DateTime @updatedAt
+
+  branch          Branch          @relation(fields: [branchId], references: [id])
+  supplierProduct SupplierProduct @relation(fields: [supplierProductId], references: [id])
+
+  @@unique([branchId, supplierProductId])
+  @@map("stock_levels")
+}
+
+model DistributorOrder {
+  id          String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  branchId    String                 @db.Uuid
+  supplierId  String                 @db.Uuid
+  status      DistributorOrderStatus @default(draft)
+  submittedAt DateTime?
+  receivedAt  DateTime?
+  createdBy   String                 @db.Uuid
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+
+  branch   Branch                 @relation(fields: [branchId], references: [id])
+  supplier Supplier               @relation(fields: [supplierId], references: [id])
+  items    DistributorOrderItem[]
+
+  @@map("distributor_orders")
+}
+
+model DistributorOrderItem {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  distributorOrderId  String   @db.Uuid
+  supplierProductId   String   @db.Uuid
+  suggestedQuantity   Decimal  @db.Decimal(10, 3)
+  orderedQuantity     Decimal  @db.Decimal(10, 3)
+  receivedQuantity    Decimal? @db.Decimal(10, 3)
+  discrepancyFlagged  Boolean  @default(false)
+  createdAt           DateTime @default(now())
+
+  distributorOrder  DistributorOrder @relation(fields: [distributorOrderId], references: [id])
+  supplierProduct   SupplierProduct  @relation(fields: [supplierProductId], references: [id])
+
+  @@map("distributor_order_items")
+}
+
+// ─── Waste ────────────────────────────────────────────────────────────────────
+
+model WasteLog {
+  id        String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  branchId  String      @db.Uuid
+  date      DateTime    @db.Date
+  itemName  String
+  quantity  Decimal     @db.Decimal(10, 3)
+  unit      String
+  reason    WasteReason
+  costPrice Int?
+  loggedBy  String      @db.Uuid
+  createdAt DateTime    @default(now())
+
+  branch   Branch @relation(fields: [branchId], references: [id])
+  logger   User   @relation(fields: [loggedBy], references: [id])
+
+  @@map("waste_log")
+}
+
+// ─── Finance ──────────────────────────────────────────────────────────────────
+
+model FinancePeriod {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  branchId    String    @db.Uuid
+  periodStart DateTime  @db.Date
+  periodEnd   DateTime  @db.Date
+  isClosed    Boolean   @default(false)
+  closedBy    String?   @db.Uuid
+  closedAt    DateTime?
+  createdAt   DateTime  @default(now())
+
+  branch Branch @relation(fields: [branchId], references: [id])
+  closer User?  @relation(fields: [closedBy], references: [id])
+
+  @@map("finance_periods")
+}
+
+// ─── Reviews ──────────────────────────────────────────────────────────────────
+
+model ReviewScore {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  branchId    String       @db.Uuid
+  score       Decimal      @db.Decimal(3, 1)
+  reviewCount Int          @default(0)
+  source      ReviewSource @default(manual)
+  fetchedAt   DateTime?
+  createdAt   DateTime     @default(now())
+
+  branch Branch @relation(fields: [branchId], references: [id])
+
+  @@map("review_scores")
+}
+
+// ─── Error Log ────────────────────────────────────────────────────────────────
+
+model ErrorLog {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  message   String
+  stack     String?
+  path      String?
+  method    String?
+  userId    String?  @db.Uuid
+  createdAt DateTime @default(now())
+
+  @@map("error_log")
+}
