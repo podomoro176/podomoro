@@ -12,6 +12,10 @@ import onlineRouter, { stripeWebhookRouter } from './modules/online/online.route
 import hrRouter from './modules/hr/hr.router';
 import sopRouter from './modules/sop/sop.router';
 import distributorsRouter from './modules/distributors/distributors.router';
+import wasteRouter from './modules/waste/waste.router';
+import financeRouter from './modules/finance/finance.router';
+import reviewsRouter from './modules/reviews/reviews.router';
+import dashboardRouter from './modules/dashboard/dashboard.router';
 import { authenticate } from './middleware/authenticate';
 import { requireRole } from './middleware/requireRole';
 
@@ -43,6 +47,10 @@ app.use('/api/v1/online', onlineRouter);
 app.use('/api/v1/hr', hrRouter);
 app.use('/api/v1/sop', sopRouter);
 app.use('/api/v1/distributors', distributorsRouter);
+app.use('/api/v1/waste', wasteRouter);
+app.use('/api/v1/finance', financeRouter);
+app.use('/api/v1/reviews', reviewsRouter);
+app.use('/api/v1/dashboard', dashboardRouter);
 
 // Stock level update (standalone route, manager/staff)
 app.put(
