@@ -7,7 +7,7 @@ export async function getOnlineMenu(params?: { branchId?: string; page?: number;
 }
 
 export async function validateCart(items: Array<{ menuItemId: string; quantity: number }>): Promise<void> {
-  await api.post('/online/validate-cart', { items });
+  await api.post('/online/cart', { items });
 }
 
 export async function checkout(body: { branchId: string; customerEmail: string; customerName: string; isTakeaway: boolean; items: Array<{ menuItemId: string; quantity: number }>; notes?: string }): Promise<{ clientSecret: string; amount: number; orderId: string }> {
