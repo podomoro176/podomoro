@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import prisma from '../../lib/prisma';
 import { AuditEventType } from '@prisma/client';
 
@@ -35,7 +36,7 @@ function signAccess(userId: string, email: string, role: string, branchId: strin
 }
 
 function signRefresh(userId: string) {
-  return jwt.sign({ sub: userId }, process.env.JWT_REFRESH_SECRET!, { expiresIn: REFRESH_EXPIRES });
+  return jwt.sign({ sub: userId, jti: crypto.randomUUID() }, process.env.JWT_REFRESH_SECRET!, { expiresIn: REFRESH_EXPIRES });
 }
 
 export async function login(email: string, password: string, ctx: AuditContext) {

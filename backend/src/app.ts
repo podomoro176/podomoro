@@ -7,11 +7,22 @@ import prisma from './lib/prisma';
 import authRouter from './modules/auth/auth.router';
 import branchesRouter from './modules/branches/branches.router';
 import menuRouter from './modules/menu/menu.router';
+import posRouter from './modules/pos/pos.router';
+import onlineRouter, { stripeWebhookRouter } from './modules/online/online.router';
+import hrRouter from './modules/hr/hr.router';
+import sopRouter from './modules/sop/sop.router';
+import distributorsRouter from './modules/distributors/distributors.router';
+import { authenticate } from './middleware/authenticate';
+import { requireRole } from './middleware/requireRole';
 
 const app = express();
 
 app.use(helmet());
 app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:5173', credentials: true }));
+
+// Stripe webhook must receive raw body — mount BEFORE express.json()
+app.use('/api/v1/webhooks', stripeWebhookRouter);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -27,6 +38,27 @@ app.use(globalLimiter);
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/branches', branchesRouter);
 app.use('/api/v1/menu', menuRouter);
+app.use('/api/v1/pos', posRouter);
+app.use('/api/v1/online', onlineRouter);
+app.use('/api/v1/hr', hrRouter);
+app.use('/api/v1/sop', sopRouter);
+app.use('/api/v1/distributors', distributorsRouter);
+
+// Stock level update (standalone route, manager/staff)
+app.put(
+  '/api/v1/stock/:id',
+  authenticate,
+  requireRole('manager', 'owner', 'staff'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { updateStock } = await import('./modules/distributors/distributors.service');
+      const { updateStockSchema } = await import('./modules/distributors/distributors.schema');
+      const parsed = updateStockSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(422).json({ success: false, error: parsed.error.flatten() });
+      res.json({ success: true, data: await updateStock(req.params.id as string, parsed.data) });
+    } catch (err) { next(err); }
+  },
+);
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
