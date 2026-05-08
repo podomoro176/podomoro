@@ -58,26 +58,41 @@ Multi-branch restaurant management platform for the Dutch market. Handles POS, o
 
 ## 4. Setup
 
+### Backend
+
 ```bash
-# 1. Clone and install
-git clone <repo-url> podomoro
+git clone https://github.com/podomoro176/podomoro
 cd podomoro/backend
 npm install
-
-# 2. Create environment file
-cp .env.example .env
-# Edit .env — fill in all required values (see below)
-
-# 3. Run database migrations and generate Prisma client
-npx prisma migrate dev --name init
-npx prisma generate
-
-# 4. Start development server
-npm run dev
-
-# 5. Run tests (requires a running PostgreSQL instance)
-npm test
+cp .env.example .env        # fill in required values — see section below
+npx prisma migrate deploy
+npm run prisma:seed          # creates 2 branches, 6 users, 5 menu items
+npm run dev                  # http://localhost:3000
+npm test                     # 71 integration tests
 ```
+
+### Frontend
+
+```bash
+cd podomoro/frontend
+npm install
+# create frontend/.env:
+# VITE_STRIPE_PUBLISHABLE_KEY=pk_test_...
+npm run dev                  # http://localhost:5173
+```
+
+The Vite dev server proxies `/api` and `/socket.io` to `localhost:3000` automatically.
+
+### Test credentials (after seed)
+
+| Role | Email | Password |
+|---|---|---|
+| Owner | eigenaar@podomoro.nl | Owner@1234 |
+| Partner | partner@podomoro.nl | Partner@1234 |
+| Manager | manager@podomoro.nl | Manager@1234 |
+| Cashier | kassa@podomoro.nl | Cashier@1234 |
+| Staff | medewerker1@podomoro.nl | Staff@1234 |
+| Boekhouder | boekhouder@podomoro.nl | Boekhouder@1234 |
 
 ### Required environment variables (`backend/.env`)
 
