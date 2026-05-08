@@ -104,7 +104,18 @@ async function main() {
     },
   });
 
-  console.log('Users created:', [owner, manager, cashier, staff1, staff2, boekhouder].map(u => u.email).join(', '));
+  const partner = await prisma.user.upsert({
+    where: { email: 'partner@podomoro.nl' },
+    update: {},
+    create: {
+      email: 'partner@podomoro.nl',
+      passwordHash: await hash('Partner@1234'),
+      role: Role.partner,
+      branchId: null,
+    },
+  });
+
+  console.log('Users created:', [owner, manager, cashier, staff1, staff2, boekhouder, partner].map(u => u.email).join(', '));
 
   // ── Menu Items ────────────────────────────────────────────────────────────
   const menuItems = [
@@ -320,6 +331,7 @@ async function main() {
   console.log('  cashier:    kassa@podomoro.nl      / Cashier@1234');
   console.log('  staff:      medewerker1@podomoro.nl/ Staff@1234');
   console.log('  boekhouder: boekhouder@podomoro.nl / Boekhouder@1234');
+  console.log('  partner:    partner@podomoro.nl    / Partner@1234');
 }
 
 main()
