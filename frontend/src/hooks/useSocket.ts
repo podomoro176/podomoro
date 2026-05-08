@@ -3,9 +3,15 @@ import { io, Socket } from 'socket.io-client';
 
 let socket: Socket | null = null;
 
+function getSocketOrigin(): string {
+  const apiUrl = import.meta.env.VITE_API_URL as string | undefined;
+  if (!apiUrl) return '/'; // dev: relative, uses Vite proxy
+  try { return new URL(apiUrl).origin; } catch { return '/'; }
+}
+
 function getSocket(): Socket {
   if (!socket) {
-    socket = io('/', { path: '/socket.io', transports: ['websocket', 'polling'] });
+    socket = io(getSocketOrigin(), { path: '/socket.io', transports: ['websocket', 'polling'] });
   }
   return socket;
 }
