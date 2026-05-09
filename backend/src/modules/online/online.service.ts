@@ -125,8 +125,9 @@ export async function handleStripeWebhook(rawBody: Buffer, signature: string) {
   emitToRoom(`branch:${branchId}:pos`, 'order:new', { order });
   emitToRoom('owner:live-feed', 'order:new', { order });
 
-  // Confirmation email
-  await sendMail(customerEmail, 'Bestellingsbevestiging — Podomoro', confirmationEmailHtml(order.orderNumber, intent.amount));
+  // Confirmation email — fire-and-forget so a Resend error doesn't abort the order
+  sendMail(customerEmail, 'Bestellingsbevestiging — Podomoro', confirmationEmailHtml(order.orderNumber, intent.amount))
+    .catch((err) => console.error('[online] confirmation email failed:', err.message));
 
   return { received: true, orderId: order.id };
 }
@@ -159,7 +160,8 @@ export async function getOrderStatus(orderId: string) {
 // ── Reservations ──────────────────────────────────────────────────────────────
 
 export async function createReservation(data: ReservationInput) {
-  await sendMail(data.email, 'Reserveringsbevestiging — Podomoro', reservationEmailHtml(data));
+  sendMail(data.email, 'Reserveringsbevestiging — Podomoro', reservationEmailHtml(data))
+    .catch((err) => console.error('[online] reservation email failed:', err.message));
   return { reserved: true, ...data };
 }
 

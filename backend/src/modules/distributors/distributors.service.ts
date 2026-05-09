@@ -117,11 +117,11 @@ export async function submitOrder(id: string) {
     `- ${i.supplierProduct.name}: ${i.orderedQuantity} ${i.supplierProduct.unit}`
   ).join('\n');
 
-  await sendMail(
+  sendMail(
     order.supplier.email,
     `Bestelling van Podomoro — #${id.slice(0, 8)}`,
     `<pre>Nieuwe bestelling ontvangen:\n\n${itemLines}\n\nMet vriendelijke groet,\nPodomoro</pre>`,
-  );
+  ).catch((err) => console.error('[distributors] order email failed:', err.message));
 
   return updated;
 }

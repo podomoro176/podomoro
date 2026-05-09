@@ -166,11 +166,11 @@ export async function reviewLeave(id: string, data: ReviewLeaveInput, reviewerId
   });
 
   const statusNL = data.status === 'approved' ? 'goedgekeurd' : 'afgewezen';
-  await sendMail(
+  sendMail(
     leave.employee.user.email,
     `Verlofaanvraag ${statusNL}`,
     `<p>Uw verlofaanvraag van ${leave.startDate.toLocaleDateString('nl-NL')} t/m ${leave.endDate.toLocaleDateString('nl-NL')} is <strong>${statusNL}</strong>.</p>`,
-  );
+  ).catch((err) => console.error('[hr] leave email failed:', err.message));
 
   return updated;
 }

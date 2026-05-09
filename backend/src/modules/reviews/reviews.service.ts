@@ -58,11 +58,11 @@ export async function createReview(data: CreateReviewInput) {
     const ownerEmail = process.env.OWNER_EMAIL;
     if (ownerEmail) {
       const branch = await prisma.branch.findUnique({ where: { id: data.branchId }, select: { name: true } });
-      await sendMail(
+      sendMail(
         ownerEmail,
         `Score alert: ${branch?.name ?? data.branchId} heeft score ${data.score}`,
         `<p>Vestiging <strong>${branch?.name ?? data.branchId}</strong> heeft een score van <strong>${data.score}</strong> ontvangen (onder 4.0).</p>`,
-      );
+      ).catch((err) => console.error('[reviews] alert email failed:', err.message));
     }
   }
 
